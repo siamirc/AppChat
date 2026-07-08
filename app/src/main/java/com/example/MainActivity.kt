@@ -81,7 +81,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun IrcRadioApp(viewModel: MainViewModel) {
     val context = LocalContext.current
@@ -205,7 +205,8 @@ fun IrcRadioApp(viewModel: MainViewModel) {
             )
         },
         bottomBar = {
-            if (connectionState != IrcConnectionState.DISCONNECTED && connectionState != IrcConnectionState.ERROR) {
+            val isKeyboardVisible = WindowInsets.isImeVisible
+            if (!isKeyboardVisible && connectionState != IrcConnectionState.DISCONNECTED && connectionState != IrcConnectionState.ERROR) {
                 NavigationBar(
                     containerColor = CosmicCard,
                     contentColor = SoftWhite
@@ -1125,6 +1126,7 @@ fun ChatInterfacePanel(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .imePadding()
                 .padding(12.dp)
         ) {
             // Quick IRC commands bar
@@ -1160,8 +1162,7 @@ fun ChatInterfacePanel(
             // Keyboard field + Send Action
             Row(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .imePadding(),
+                    .fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
