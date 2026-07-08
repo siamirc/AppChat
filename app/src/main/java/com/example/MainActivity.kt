@@ -141,7 +141,7 @@ fun IrcRadioApp(viewModel: MainViewModel) {
                                 )
                             )
                             Text(
-                                text = "irc.thaiirc.com:6777",
+                                text = "irc.thaiirc.com:6667",
                                 style = MaterialTheme.typography.bodySmall.copy(
                                     fontSize = 10.sp,
                                     color = MutedGray

@@ -38,15 +38,15 @@ class RadioPlayerManager(private val context: Context) {
     val stations = listOf(
         RadioStation(
             id = "icecast",
-            name = "ThaiIRC Icecast",
-            url = "http://icecast.thaiiirc.com:8000",
-            description = "ฟังเพลงออนไลน์ 24 ชม. ผ่านเซิร์ฟเวอร์ Icecast"
+            name = "Music Quest",
+            url = "http://icecast.thaiirc.com:8000/ices",
+            description = "ขอและฟังเพลงจากสถานี MQuest"
         ),
         RadioStation(
             id = "radio",
-            name = "ThaiIRC Radio",
-            url = "http://radio.thaiirc.com:8002",
-            description = "วิทยุออนไลน์คลื่นชุมชน ThaiIRC"
+            name = "Live Radio",
+            url = "http://radio.thaiirc.com:8002/ices",
+            description = "ขอและฟังเพลงจากสถานี Live Radio"
         )
     )
 
