@@ -14,6 +14,8 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -459,6 +461,75 @@ fun RadioPlayerCard(
             }
 
             Spacer(modifier = Modifier.height(14.dp))
+
+            // Marquee Banner showing currently playing songs
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(playerTextColor.copy(alpha = 0.08f))
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.MusicNote,
+                    contentDescription = null,
+                    tint = playerTextColor,
+                    modifier = Modifier.size(14.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "รายการเพลง: ",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.Bold,
+                        color = playerTextColor
+                    )
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                // Scrolling marquee content
+                val marqueeSongs = if (currentStation?.id == "icecast") {
+                    "🎶 1. คุกกี้เสี่ยงทาย - BNK48 (ขอโดย: User_32)  •  2. ซ่อนกลิ่น - Palmy (ขอโดย: ThaiBoy)  •  3. รักแรก - Nont Tanont (ขอโดย: SweetGirl)  •  4. วัดปะหล่ะ? - 4EVE (ขอโดย: MusicLover)  •  ขอเพลงได้ฟรีผ่านห้องแชทพิมพ์ /radio ได้ตลอด 24 ชั่วโมง! 🎶"
+                } else {
+                    "🎶 1. สองใจ - ดา เอ็นโดรฟิน (ขอโดย: Admin_Thai)  •  2. พิง - Nont Tanont (ขอโดย: IceCream)  •  3. กลิ่นดอกไม้ - Newery (ขอโดย: NightCat)  •  4. โต๊ะริม - Nont Tanont (ขอโดย: Smile99)  •  ขอเพลงผ่านหน้าห้องแชทพิมพ์ /radio เพื่อฟังแบบสดๆ เลย! 🎶"
+                }
+                
+                Box(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    val scrollState = rememberScrollState()
+                    LaunchedEffect(marqueeSongs) {
+                        scrollState.scrollTo(0)
+                        while (true) {
+                            kotlinx.coroutines.delay(1200)
+                            val maxScroll = scrollState.maxValue
+                            if (maxScroll > 0) {
+                                scrollState.animateScrollTo(
+                                    value = maxScroll,
+                                    animationSpec = tween(
+                                        durationMillis = maxScroll * 25,
+                                        easing = LinearEasing
+                                    )
+                                )
+                                kotlinx.coroutines.delay(1200)
+                                scrollState.scrollTo(0)
+                            } else {
+                                kotlinx.coroutines.delay(2000)
+                            }
+                        }
+                    }
+                    Text(
+                        text = marqueeSongs,
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            color = playerTextColor,
+                            fontSize = 11.sp
+                        ),
+                        maxLines = 1,
+                        softWrap = false,
+                        modifier = Modifier.horizontalScroll(scrollState, enabled = false)
+                    )
+                }
+            }
 
             // Row 2: Selectable Station Chips (Port 8000 & 8002)
             Row(

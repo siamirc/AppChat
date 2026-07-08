@@ -63,18 +63,15 @@ class IrcClient {
     private var connectionJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO)
 
-    // Select the Thai encoding TIS-620 with fallback to UTF-8
-    private val thaiCharset: Charset by lazy {
-        try {
-            Charset.forName("TIS-620")
-        } catch (e: Exception) {
-            try {
-                Charset.forName("ISO-8859-11")
-            } catch (ex: Exception) {
-                java.nio.charset.StandardCharsets.UTF_8
-            }
-        }
-    }
+    // Last used connection parameters for auto-reconnection
+    private var lastNick: String = ""
+    private var lastServer: String = "irc.thaiirc.com"
+    private var lastPort: Int = 6667
+    private var userRequestedDisconnect = false
+    private var reconnectJob: Job? = null
+
+    // We changed the encoding back to UTF-8 as requested by the user
+    private val thaiCharset: Charset = java.nio.charset.StandardCharsets.UTF_8
 
     fun updateNick(newNick: String) {
         val trimmed = newNick.trim().replace(" ", "_")
@@ -91,14 +88,21 @@ class IrcClient {
         _currentChannel.value = channel
     }
 
-    fun connect(nick: String, server: String = "irc.thaiirc.com", port: Int = 6777) {
-        if (_connectionState.value != IrcConnectionState.DISCONNECTED) return
-
+    fun connect(nick: String, server: String = "irc.thaiirc.com", port: Int = 6667) {
         val trimmedNick = nick.trim().replace(" ", "_")
         if (trimmedNick.isEmpty()) {
             scope.launch { _errorFlow.emit("กรุณาใส่ชื่อเล่น (Nickname)") }
             return
         }
+
+        // Save last connection state
+        lastNick = trimmedNick
+        lastServer = server
+        lastPort = port
+        userRequestedDisconnect = false
+        reconnectJob?.cancel()
+
+        if (_connectionState.value == IrcConnectionState.CONNECTED || _connectionState.value == IrcConnectionState.CONNECTING) return
 
         _currentNick.value = trimmedNick
         _connectionState.value = IrcConnectionState.CONNECTING
@@ -107,6 +111,8 @@ class IrcClient {
         connectionJob = scope.launch {
             try {
                 val s = Socket(server, port)
+                s.keepAlive = true // Enable keep alive to keep background connection stable
+                s.tcpNoDelay = true
                 socket = s
                 reader = BufferedReader(InputStreamReader(s.getInputStream(), thaiCharset))
                 writer = BufferedWriter(OutputStreamWriter(s.getOutputStream(), thaiCharset))
@@ -125,11 +131,18 @@ class IrcClient {
                 _connectionState.value = IrcConnectionState.ERROR
                 addSystemMessage("การเชื่อมต่อล้มเหลว: ${e.localizedMessage ?: "ไม่สามารถเชื่อมต่อได้"}")
                 disconnectInternal()
+
+                // If it wasn't a manual user action, retry connecting in a few seconds
+                if (!userRequestedDisconnect) {
+                    scheduleReconnection()
+                }
             }
         }
     }
 
     fun disconnect() {
+        userRequestedDisconnect = true
+        reconnectJob?.cancel()
         addSystemMessage("กำลังตัดการเชื่อมต่อ...")
         disconnectInternal()
     }
@@ -144,6 +157,21 @@ class IrcClient {
         writer = null
         connectionJob?.cancel()
         connectionJob = null
+    }
+
+    private fun scheduleReconnection() {
+        if (userRequestedDisconnect) return
+        reconnectJob?.cancel()
+        reconnectJob = scope.launch {
+            // Wait 5 seconds before retrying
+            addSystemMessage("กำลังจะเชื่อมต่อใหม่ในอีก 5 วินาที...")
+            kotlinx.coroutines.delay(5000)
+            if (!userRequestedDisconnect && _connectionState.value != IrcConnectionState.CONNECTED && _connectionState.value != IrcConnectionState.CONNECTING) {
+                withContext(Dispatchers.Main) {
+                    connect(lastNick, lastServer, lastPort)
+                }
+            }
+        }
     }
 
     fun sendChatMessage(target: String, message: String) {
@@ -246,9 +274,16 @@ class IrcClient {
                 Log.e("IrcClient", "Error in listen loop", e)
             } finally {
                 withContext(Dispatchers.Main) {
-                    if (_connectionState.value == IrcConnectionState.CONNECTED) {
-                        addSystemMessage("การเชื่อมต่อเซิร์ฟเวอร์ขาดหาย...")
+                    if (_connectionState.value == IrcConnectionState.CONNECTED || _connectionState.value == IrcConnectionState.CONNECTING) {
+                        if (!userRequestedDisconnect) {
+                            addSystemMessage("การเชื่อมต่อเซิร์ฟเวอร์ขาดหาย กำลังพยายามเชื่อมต่อใหม่...")
+                        } else {
+                            addSystemMessage("การเชื่อมต่อเซิร์ฟเวอร์ขาดหาย...")
+                        }
                         disconnectInternal()
+                    }
+                    if (!userRequestedDisconnect) {
+                        scheduleReconnection()
                     }
                 }
             }
