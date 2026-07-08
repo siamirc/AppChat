@@ -93,6 +93,7 @@ fun IrcRadioApp(viewModel: MainViewModel) {
     val joinedChannels by viewModel.ircClient.joinedChannels.collectAsStateWithLifecycle()
     val channelUsers by viewModel.ircClient.channelUsers.collectAsStateWithLifecycle()
     val currentNick by viewModel.ircClient.currentNick.collectAsStateWithLifecycle()
+    val quitMessage by viewModel.ircClient.quitMessage.collectAsStateWithLifecycle()
 
     val playbackState by viewModel.radioPlayer.playbackState.collectAsStateWithLifecycle()
     val currentStation by viewModel.radioPlayer.currentStation.collectAsStateWithLifecycle()
@@ -105,6 +106,14 @@ fun IrcRadioApp(viewModel: MainViewModel) {
     var showUserListDialog by remember { mutableStateOf(false) }
     var showJoinChannelDialog by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
+    
+    var currentTab by remember { mutableStateOf(AppTab.CHAT) }
+
+    LaunchedEffect(connectionState) {
+        if (connectionState == IrcConnectionState.CONNECTED) {
+            currentTab = AppTab.CHAT
+        }
+    }
 
     val activeChannelUsers = channelUsers[currentChannel] ?: emptySet()
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -194,6 +203,41 @@ fun IrcRadioApp(viewModel: MainViewModel) {
                     titleContentColor = SoftWhite
                 )
             )
+        },
+        bottomBar = {
+            if (connectionState != IrcConnectionState.DISCONNECTED && connectionState != IrcConnectionState.ERROR) {
+                NavigationBar(
+                    containerColor = CosmicCard,
+                    contentColor = SoftWhite
+                ) {
+                    NavigationBarItem(
+                        selected = currentTab == AppTab.CHAT,
+                        onClick = { currentTab = AppTab.CHAT },
+                        icon = { Icon(Icons.Filled.Chat, contentDescription = "ห้องแชท") },
+                        label = { Text("ห้องแชท") },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = CosmicBackground,
+                            selectedTextColor = NeonBlue,
+                            indicatorColor = NeonBlue,
+                            unselectedIconColor = MutedGray,
+                            unselectedTextColor = MutedGray
+                        )
+                    )
+                    NavigationBarItem(
+                        selected = currentTab == AppTab.RADIO,
+                        onClick = { currentTab = AppTab.RADIO },
+                        icon = { Icon(Icons.Filled.Radio, contentDescription = "ฟังเพลง/วิทยุ") },
+                        label = { Text("วิทยุออนไลน์") },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = CosmicBackground,
+                            selectedTextColor = NeonBlue,
+                            indicatorColor = NeonBlue,
+                            unselectedIconColor = MutedGray,
+                            unselectedTextColor = MutedGray
+                        )
+                    )
+                }
+            }
         }
     ) { innerPadding ->
         Column(
@@ -202,22 +246,21 @@ fun IrcRadioApp(viewModel: MainViewModel) {
                 .fillMaxSize()
                 .background(CosmicBackground)
         ) {
-            // SECTION 1: Radio Player Widget (Always visible)
-            RadioPlayerCard(
-                currentStation = currentStation,
-                playbackState = playbackState,
-                volume = volume,
-                stations = viewModel.radioPlayer.stations,
-                onPlayPause = { viewModel.radioPlayer.togglePlayPause() },
-                onStop = { viewModel.radioPlayer.stop() },
-                onStationSelect = { viewModel.radioPlayer.selectStation(it) },
-                onVolumeChange = { viewModel.radioPlayer.setVolume(it) }
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // SECTION 2: Main Area (Changes between Connection Form and Chat Area)
             if (connectionState == IrcConnectionState.DISCONNECTED || connectionState == IrcConnectionState.ERROR) {
+                // SECTION 1: Radio Player Widget (Visible on setup screen)
+                RadioPlayerCard(
+                    currentStation = currentStation,
+                    playbackState = playbackState,
+                    volume = volume,
+                    stations = viewModel.radioPlayer.stations,
+                    onPlayPause = { viewModel.radioPlayer.togglePlayPause() },
+                    onStop = { viewModel.radioPlayer.stop() },
+                    onStationSelect = { viewModel.radioPlayer.selectStation(it) },
+                    onVolumeChange = { viewModel.radioPlayer.setVolume(it) }
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
                 // Connection Configuration Panel
                 ConnectionSetupPanel(
                     nickname = nicknameInput,
@@ -232,26 +275,66 @@ fun IrcRadioApp(viewModel: MainViewModel) {
                     }
                 )
             } else {
-                // Connected Chat Interface
-                ChatInterfacePanel(
-                    modifier = Modifier.weight(1f),
-                    currentChannel = currentChannel,
-                    joinedChannels = joinedChannels,
-                    messages = messages.filter { it.target == null || it.target == currentChannel },
-                    activeUsersCount = activeChannelUsers.size,
-                    chatInput = chatMessageInput,
-                    currentNick = currentNick,
-                    onChatInputChange = { chatMessageInput = it },
-                    onSendMessage = {
-                        viewModel.ircClient.sendChatMessage(currentChannel, chatMessageInput)
-                        chatMessageInput = ""
-                    },
-                    onChannelSelect = { viewModel.ircClient.updateCurrentChannel(it) },
-                    onLeaveChannel = { viewModel.ircClient.sendRaw("PART $it") },
-                    onJoinChannelClick = { showJoinChannelDialog = true },
-                    onShowUserList = { showUserListDialog = true },
-                    onDisconnect = { viewModel.ircClient.disconnect() }
-                )
+                // When connected, switch views based on selected tab
+                if (currentTab == AppTab.CHAT) {
+                    // Connected Chat Interface
+                    ChatInterfacePanel(
+                        modifier = Modifier.weight(1f),
+                        currentChannel = currentChannel,
+                        joinedChannels = joinedChannels,
+                        messages = messages.filter { it.target == null || it.target == currentChannel },
+                        activeUsersCount = activeChannelUsers.size,
+                        chatInput = chatMessageInput,
+                        currentNick = currentNick,
+                        onChatInputChange = { chatMessageInput = it },
+                        onSendMessage = {
+                            viewModel.ircClient.sendChatMessage(currentChannel, chatMessageInput)
+                            chatMessageInput = ""
+                        },
+                        onChannelSelect = { viewModel.ircClient.updateCurrentChannel(it) },
+                        onLeaveChannel = { viewModel.ircClient.sendRaw("PART $it") },
+                        onJoinChannelClick = { showJoinChannelDialog = true },
+                        onShowUserList = { showUserListDialog = true },
+                        onDisconnect = { viewModel.ircClient.disconnect() }
+                    )
+                } else {
+                    // Separate page/tab for the Radio Player
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "วิทยุออนไลน์",
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontWeight = FontWeight.Bold,
+                                color = SoftWhite
+                            ),
+                            modifier = Modifier.padding(bottom = 16.dp)
+                        )
+                        RadioPlayerCard(
+                            currentStation = currentStation,
+                            playbackState = playbackState,
+                            volume = volume,
+                            stations = viewModel.radioPlayer.stations,
+                            onPlayPause = { viewModel.radioPlayer.togglePlayPause() },
+                            onStop = { viewModel.radioPlayer.stop() },
+                            onStationSelect = { viewModel.radioPlayer.selectStation(it) },
+                            onVolumeChange = { viewModel.radioPlayer.setVolume(it) }
+                        )
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Text(
+                            text = "ควบคุมการเล่นวิทยุออนไลน์ได้ที่นี่ เพลงจะเล่นอย่างต่อเนื่องในพื้นหลังแม้ในขณะที่คุณสลับกลับไปที่แชทหรือปิดหน้าจอ",
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                color = MutedGray,
+                                textAlign = TextAlign.Center
+                            ),
+                            modifier = Modifier.padding(horizontal = 16.dp)
+                        )
+                    }
+                }
             }
         }
     }
@@ -280,9 +363,12 @@ fun IrcRadioApp(viewModel: MainViewModel) {
     if (showSettingsDialog) {
         SettingsDialog(
             currentNick = currentNick,
+            currentQuitMessage = quitMessage,
             onUpdateNick = {
                 viewModel.ircClient.updateNick(it)
-                showSettingsDialog = false
+            },
+            onUpdateQuitMessage = {
+                viewModel.ircClient.updateQuitMessage(it)
             },
             onDismiss = { showSettingsDialog = false }
         )
@@ -1430,16 +1516,19 @@ fun JoinChannelDialog(
 @Composable
 fun SettingsDialog(
     currentNick: String,
+    currentQuitMessage: String,
     onUpdateNick: (String) -> Unit,
+    onUpdateQuitMessage: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
     var nickInput by remember { mutableStateOf(currentNick) }
+    var quitMessageInput by remember { mutableStateOf(currentQuitMessage) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = "ตั้งค่าชื่อผู้ใช้",
+                text = "ตั้งค่าระบบ & โปรไฟล์",
                 color = SoftWhite,
                 fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.titleMedium
@@ -1447,8 +1536,9 @@ fun SettingsDialog(
         },
         text = {
             Column(
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                // Nickname field
                 OutlinedTextField(
                     value = nickInput,
                     onValueChange = { nickInput = it },
@@ -1458,12 +1548,32 @@ fun SettingsDialog(
                         focusedBorderColor = NeonBlue,
                         unfocusedBorderColor = CosmicCardLight,
                         focusedTextColor = SoftWhite,
-                        unfocusedTextColor = SoftWhite
+                        unfocusedTextColor = SoftWhite,
+                        focusedLabelColor = NeonBlue,
+                        unfocusedLabelColor = MutedGray
                     ),
                     modifier = Modifier.fillMaxWidth()
                 )
+
+                // Quit message field
+                OutlinedTextField(
+                    value = quitMessageInput,
+                    onValueChange = { quitMessageInput = it },
+                    label = { Text("ข้อความ Quit Message") },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = NeonBlue,
+                        unfocusedBorderColor = CosmicCardLight,
+                        focusedTextColor = SoftWhite,
+                        unfocusedTextColor = SoftWhite,
+                        focusedLabelColor = NeonBlue,
+                        unfocusedLabelColor = MutedGray
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
                 Text(
-                    text = "ระบบจะสุ่มชื่อตัวเลขให้หากชื่อซ้ำ เพื่อให้คุณเชื่อมต่อเครือข่ายได้ราบรื่นที่สุด",
+                    text = "ระบบจะใช้ Quit Message นี้เมื่อกดตัดการเชื่อมต่อจากแชท",
                     style = MaterialTheme.typography.bodySmall.copy(color = MutedGray)
                 )
             }
@@ -1474,6 +1584,8 @@ fun SettingsDialog(
                     if (nickInput.trim().isNotEmpty()) {
                         onUpdateNick(nickInput.trim())
                     }
+                    onUpdateQuitMessage(quitMessageInput.trim())
+                    onDismiss()
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = NeonBlue)
             ) {
@@ -1487,4 +1599,9 @@ fun SettingsDialog(
         },
         containerColor = CosmicCard
     )
+}
+
+enum class AppTab {
+    CHAT,
+    RADIO
 }

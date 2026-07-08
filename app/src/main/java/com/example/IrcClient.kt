@@ -54,6 +54,9 @@ class IrcClient {
     private val _currentNick = MutableStateFlow("ThaiUser_${(1000..9999).random()}")
     val currentNick: StateFlow<String> = _currentNick.asStateFlow()
 
+    private val _quitMessage = MutableStateFlow("Quit: app.thaiirc.com - live radio v2.0")
+    val quitMessage: StateFlow<String> = _quitMessage.asStateFlow()
+
     private val _errorFlow = MutableSharedFlow<String>()
     val errorFlow: SharedFlow<String> = _errorFlow.asSharedFlow()
 
@@ -82,6 +85,10 @@ class IrcClient {
                 _currentNick.value = trimmed
             }
         }
+    }
+
+    fun updateQuitMessage(newMsg: String) {
+        _quitMessage.value = newMsg
     }
 
     fun updateCurrentChannel(channel: String) {
@@ -144,7 +151,15 @@ class IrcClient {
         userRequestedDisconnect = true
         reconnectJob?.cancel()
         addSystemMessage("กำลังตัดการเชื่อมต่อ...")
-        disconnectInternal()
+        scope.launch {
+            if (_connectionState.value == IrcConnectionState.CONNECTED) {
+                sendRaw("QUIT :${_quitMessage.value}")
+                kotlinx.coroutines.delay(200)
+            }
+            withContext(Dispatchers.Main) {
+                disconnectInternal()
+            }
+        }
     }
 
     private fun disconnectInternal() {
