@@ -25,6 +25,7 @@ data class RadioStation(
 
 class RadioPlayerManager(private val context: Context) {
     private var mediaPlayer: MediaPlayer? = null
+    private var wifiLock: android.net.wifi.WifiManager.WifiLock? = null
 
     private val _playbackState = MutableStateFlow(PlaybackState.IDLE)
     val playbackState: StateFlow<PlaybackState> = _playbackState.asStateFlow()
@@ -70,8 +71,23 @@ class RadioPlayerManager(private val context: Context) {
         stop()
 
         _playbackState.value = PlaybackState.BUFFERING
+        
+        // Acquire WifiLock to keep internet connection alive for streaming
+        if (wifiLock == null) {
+            val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? android.net.wifi.WifiManager
+            wifiLock = wifiManager?.createWifiLock(android.net.wifi.WifiManager.WIFI_MODE_FULL_HIGH_PERF, "RadioPlayerWifiLock")
+        }
+        try {
+            wifiLock?.acquire()
+        } catch (e: Exception) {
+            Log.e("RadioPlayer", "Error acquiring WifiLock", e)
+        }
+
         try {
             mediaPlayer = MediaPlayer().apply {
+                // Keep CPU awake while playing
+                setWakeMode(context, android.os.PowerManager.PARTIAL_WAKE_LOCK)
+                
                 setAudioAttributes(
                     AudioAttributes.Builder()
                         .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
@@ -90,6 +106,7 @@ class RadioPlayerManager(private val context: Context) {
                 setOnErrorListener { mp, what, extra ->
                     Log.e("RadioPlayer", "MediaPlayer Error: $what, $extra")
                     _playbackState.value = PlaybackState.ERROR
+                    releaseWifiLock()
                     true
                 }
                 
@@ -98,6 +115,7 @@ class RadioPlayerManager(private val context: Context) {
         } catch (e: Exception) {
             Log.e("RadioPlayer", "Error preparing MediaPlayer", e)
             _playbackState.value = PlaybackState.ERROR
+            releaseWifiLock()
         }
     }
 
@@ -112,6 +130,8 @@ class RadioPlayerManager(private val context: Context) {
             }
         } catch (e: Exception) {
             Log.e("RadioPlayer", "Error pausing player", e)
+        } finally {
+            releaseWifiLock()
         }
     }
 
@@ -119,6 +139,11 @@ class RadioPlayerManager(private val context: Context) {
         when (_playbackState.value) {
             PlaybackState.PLAYING -> pause()
             PlaybackState.PAUSED -> {
+                // Re-acquire WifiLock when resuming playback
+                try {
+                    wifiLock?.acquire()
+                } catch (e: Exception) {}
+                
                 mediaPlayer?.let {
                     it.start()
                     _playbackState.value = PlaybackState.PLAYING
@@ -140,8 +165,20 @@ class RadioPlayerManager(private val context: Context) {
             }
         } catch (e: Exception) {
             Log.e("RadioPlayer", "Error releasing player", e)
+        } finally {
+            releaseWifiLock()
         }
         mediaPlayer = null
+    }
+
+    private fun releaseWifiLock() {
+        try {
+            if (wifiLock?.isHeld == true) {
+                wifiLock?.release()
+            }
+        } catch (e: Exception) {
+            Log.e("RadioPlayer", "Error releasing WifiLock", e)
+        }
     }
 
     fun setVolume(vol: Float) {

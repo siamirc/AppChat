@@ -1,5 +1,7 @@
 package com.example
 
+import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -117,6 +119,33 @@ fun IrcRadioApp(viewModel: MainViewModel) {
     // Auto update nick input state when nickname changes in client (e.g. random suffix)
     LaunchedEffect(currentNick) {
         nicknameInput = currentNick
+    }
+
+    // Sync foreground service life cycle with active connection or radio playback state
+    LaunchedEffect(connectionState, playbackState) {
+        val isServiceNeeded = (connectionState == IrcConnectionState.CONNECTED ||
+                connectionState == IrcConnectionState.CONNECTING ||
+                playbackState == PlaybackState.PLAYING ||
+                playbackState == PlaybackState.BUFFERING)
+
+        val intent = Intent(context, ThaiIrcService::class.java)
+        if (isServiceNeeded) {
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        } else {
+            try {
+                context.stopService(intent)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
     }
 
     Scaffold(
